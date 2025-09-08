@@ -478,18 +478,12 @@ def predict_data_source(question, available_tables):
     return tables[0] if tables else (views[0] if views else "No tables available")
 
 def get_aws_clients(config):
-    """Get AWS clients with correct profile for the account"""
-    if config['aws_account_id'] == '476169753480':
-        session = boto3.Session(profile_name='brew-demo')
-        return {
-            'athena': session.client('athena', region_name=config['aws_region']),
-            'glue': session.client('glue', region_name=config['aws_region'])
-        }
-    else:
-        return {
-            'athena': boto3.client('athena', region_name=config['aws_region']),
-            'glue': boto3.client('glue', region_name=config['aws_region'])
-        }
+    """Get AWS clients - simplified for Streamlit Cloud"""
+    # Use environment variables from Streamlit secrets (no profiles)
+    return {
+        'athena': boto3.client('athena', region_name=config['aws_region']),
+        'glue': boto3.client('glue', region_name=config['aws_region'])
+    }
     """Get AWS clients with correct profile for the account"""
     if config['aws_account_id'] == '476169753480':
         session = boto3.Session(profile_name='brew-demo')
