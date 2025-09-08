@@ -77,37 +77,47 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def check_password():
-    """Simple password protection for demo sharing - v2.0"""
+    """Simple password protection for demo sharing - v2.1"""
     def password_entered():
         # Safe password check to prevent KeyError
-        if st.session_state.get("password", "") == "athena-demo-2024":
+        password_value = st.session_state.get("password", "")
+        if password_value == "athena-demo-2024":
             st.session_state["password_correct"] = True
+            # Clear password from state
             if "password" in st.session_state:
                 del st.session_state["password"]
         else:
             st.session_state["password_correct"] = False
 
+    # Initialize password state if not exists
     if "password_correct" not in st.session_state:
+        st.session_state["password_correct"] = False
+    
+    if not st.session_state["password_correct"]:
         st.markdown("""
         <div style="text-align: center; padding: 2rem;">
             <h2>🔐 Athena Query Generator</h2>
             <p>Enter password to access the demo</p>
         </div>
         """, unsafe_allow_html=True)
-        st.text_input("Password", type="password", on_change=password_entered, key="password", 
+        
+        # Show error only if password was attempted
+        if "password_attempted" in st.session_state and st.session_state["password_attempted"]:
+            st.error("❌ Incorrect password. Please try again.")
+        
+        password_input = st.text_input("Password", type="password", key="password_input", 
                      placeholder="Enter demo password")
+        
+        if st.button("Login", type="primary"):
+            st.session_state["password_attempted"] = True
+            if password_input == "athena-demo-2024":
+                st.session_state["password_correct"] = True
+                st.rerun()
+            else:
+                st.session_state["password_correct"] = False
+                st.rerun()
+        
         st.info("💡 Contact the administrator for access credentials")
-        return False
-    elif not st.session_state["password_correct"]:
-        st.markdown("""
-        <div style="text-align: center; padding: 2rem;">
-            <h2>🔐 Athena Query Generator</h2>
-            <p>Enter password to access the demo</p>
-        </div>
-        """, unsafe_allow_html=True)
-        st.text_input("Password", type="password", on_change=password_entered, key="password",
-                     placeholder="Enter demo password")
-        st.error("❌ Incorrect password. Please try again.")
         return False
     else:
         return True
@@ -496,12 +506,37 @@ def predict_data_source(question, available_tables):
     return tables[0] if tables else (views[0] if views else "No tables available")
 
 def get_aws_clients(config):
-    """Get AWS clients - simplified for Streamlit Cloud"""
-    # Use environment variables from Streamlit secrets (no profiles)
-    return {
-        'athena': boto3.client('athena', region_name=config['aws_region']),
-        'glue': boto3.client('glue', region_name=config['aws_region'])
-    }
+    """Get AWS clients - with explicit credential handling for Streamlit Cloud"""
+    try:
+        # Try to get credentials from Streamlit secrets
+        if hasattr(st, 'secrets') and 'aws' in st.secrets:
+            return {
+                'athena': boto3.client(
+                    'athena', 
+                    region_name=config['aws_region'],
+                    aws_access_key_id=st.secrets['aws']['AWS_ACCESS_KEY_ID'],
+                    aws_secret_access_key=st.secrets['aws']['AWS_SECRET_ACCESS_KEY']
+                ),
+                'glue': boto3.client(
+                    'glue', 
+                    region_name=config['aws_region'],
+                    aws_access_key_id=st.secrets['aws']['AWS_ACCESS_KEY_ID'],
+                    aws_secret_access_key=st.secrets['aws']['AWS_SECRET_ACCESS_KEY']
+                )
+            }
+        else:
+            # Fallback to environment variables (local development)
+            return {
+                'athena': boto3.client('athena', region_name=config['aws_region']),
+                'glue': boto3.client('glue', region_name=config['aws_region'])
+            }
+    except Exception as e:
+        st.error(f"AWS client creation error: {str(e)}")
+        # Return basic clients as fallback
+        return {
+            'athena': boto3.client('athena', region_name=config['aws_region']),
+            'glue': boto3.client('glue', region_name=config['aws_region'])
+        }
     """Get AWS clients with correct profile for the account"""
     if config['aws_account_id'] == '476169753480':
         session = boto3.Session(profile_name='brew-demo')
