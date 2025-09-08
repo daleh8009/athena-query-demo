@@ -79,9 +79,10 @@ st.markdown("""
 def check_password():
     """Simple password protection for demo sharing"""
     def password_entered():
-        if st.session_state["password"] == "athena-demo-2024":
+        if st.session_state.get("password", "") == "athena-demo-2024":
             st.session_state["password_correct"] = True
-            del st.session_state["password"]
+            if "password" in st.session_state:
+                del st.session_state["password"]
         else:
             st.session_state["password_correct"] = False
 
