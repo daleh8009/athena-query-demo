@@ -130,7 +130,8 @@ def main():
         
         selected_account = st.selectbox(
             "Select AWS Account:",
-            list(ACCOUNT_CONFIGS.keys())
+            list(ACCOUNT_CONFIGS.keys()),
+            index=1  # Default to Account 2 since those are the credentials in Streamlit Cloud
         )
         
         current_config = ACCOUNT_CONFIGS[selected_account]
@@ -144,6 +145,22 @@ def main():
         with st.expander("📋 Account Details"):
             st.write(f"**Account:** {current_config['aws_account_id']}")
             st.write(f"**Database:** {current_config['glue_database']}")
+        
+        # Demo explanation
+        with st.expander("ℹ️ Demo Information"):
+            st.info("""
+            **Multi-Account Demo:**
+            
+            • **Account 2**: Live data and full functionality
+            • **Account 1**: UI demonstration (credential simulation)
+            
+            **Production Deployment:**
+            • Cross-account IAM roles
+            • Federated SSO access
+            • True multi-account authentication
+            
+            **Local Demo**: Shows full multi-account capability
+            """)
     
     # Main interface - Single page with better organization
     show_main_interface(current_config)
