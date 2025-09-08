@@ -77,8 +77,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def check_password():
-    """Simple password protection for demo sharing"""
+    """Simple password protection for demo sharing - v2.0"""
     def password_entered():
+        # Safe password check to prevent KeyError
         if st.session_state.get("password", "") == "athena-demo-2024":
             st.session_state["password_correct"] = True
             if "password" in st.session_state:
