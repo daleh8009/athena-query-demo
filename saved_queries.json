@@ -1,0 +1,12 @@
+[
+  {
+    "question": "Display contracts up for renewal",
+    "sql": "CREATE VIEW contract_risk_analysis AS\nSELECT \n    cm.Contract_ID,\n    cm.Contract_Name,\n    cm.Status,\n    cc.Risk_Level,\n    cc.Compliance_Status,\n    cc.Performance_Score,\n    co.Department,\n    co.Contract_Owner,\n    CASE \n        WHEN cc.Performance_Score >= 90 THEN 'Excellent'\n        WHEN cc.Performance_Score >= 80 THEN 'Good'\n        WHEN cc.Performance_Score >= 70 THEN 'Fair'\n        ELSE 'Poor'\n    END as Performance_Rating\nFROM contract_master cm\nJOIN contract_compliance cc ON cm.Contract_ID = cc.Contract_ID\nJOIN contract_ownership co ON cm.Contract_ID = co.Contract_ID;",
+    "timestamp": "2025-09-12 18:01:08"
+  },
+  {
+    "question": "Display contracts up for renewal",
+    "sql": "CREATE VIEW contract_risk_analysis AS\nSELECT \n    cm.Contract_ID,\n    cm.Contract_Name,\n    cm.Status,\n    cc.Risk_Level,\n    cc.Compliance_Status,\n    cc.Performance_Score,\n    co.Department,\n    co.Contract_Owner,\n    CASE \n        WHEN cc.Performance_Score >= 90 THEN 'Excellent'\n        WHEN cc.Performance_Score >= 80 THEN 'Good'\n        WHEN cc.Performance_Score >= 70 THEN 'Fair'\n        ELSE 'Poor'\n    END as Performance_Rating\nFROM contract_master cm\nJOIN contract_compliance cc ON cm.Contract_ID = cc.Contract_ID\nJOIN contract_ownership co ON cm.Contract_ID = co.Contract_ID;",
+    "timestamp": "2025-09-12 18:27:46"
+  }
+]
