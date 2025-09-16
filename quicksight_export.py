@@ -18,8 +18,17 @@ class QuickSightExporter:
                     aws_secret_access_key=st.secrets['aws']['AWS_SECRET_ACCESS_KEY']
                 )
             else:
-                # Fallback to default credentials (environment variables, IAM roles, etc.)
-                self.quicksight = boto3.client('quicksight', region_name=config['aws_region'])
+                # Check if we're running locally (has AWS credentials file)
+                if os.path.exists(os.path.expanduser('~/.aws/credentials')):
+                    # For Account 2, use the brew-demo profile (localhost only)
+                    if config['aws_account_id'] == '476169753480':
+                        session = boto3.Session(profile_name='brew-demo')
+                        self.quicksight = session.client('quicksight', region_name=config['aws_region'])
+                    else:
+                        self.quicksight = boto3.client('quicksight', region_name=config['aws_region'])
+                else:
+                    # Streamlit Cloud - use default credentials
+                    self.quicksight = boto3.client('quicksight', region_name=config['aws_region'])
         except Exception:
             # Final fallback
             self.quicksight = boto3.client('quicksight', region_name=config['aws_region'])
