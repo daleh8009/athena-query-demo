@@ -7,38 +7,39 @@ import json
 
 class QuickSightExporter:
     def __init__(self, config):
-        # Use the same AWS configuration as the main app
-        try:
-            # Try Streamlit Cloud secrets first (for deployed version)
-            if hasattr(st, 'secrets') and 'aws' in st.secrets:
-                self.quicksight = boto3.client(
-                    'quicksight', 
-                    region_name=config['aws_region'],
-                    aws_access_key_id=st.secrets['aws']['AWS_ACCESS_KEY_ID'],
-                    aws_secret_access_key=st.secrets['aws']['AWS_SECRET_ACCESS_KEY']
-                )
-                st.info(f"✅ Using Streamlit secrets for account {self.account_id}")
-            else:
-                # Local environment logic
-                if config['aws_account_id'] == '476169753480':
-                    # Account 2 - use brew-demo profile
-                    session = boto3.Session(profile_name='brew-demo')
-                    self.quicksight = session.client('quicksight', region_name=config['aws_region'])
-                    st.info(f"✅ Using brew-demo profile for account {self.account_id}")
-                else:
-                    # Account 1 - use default profile  
-                    self.quicksight = boto3.client('quicksight', region_name=config['aws_region'])
-                    st.info(f"✅ Using default profile for account {self.account_id}")
-        except Exception as e:
-            st.error(f"QuickSight client creation error: {str(e)}")
-            # Final fallback
-            self.quicksight = boto3.client('quicksight', region_name=config['aws_region'])
-        
+        # Set all attributes first
         self.account_id = config['aws_account_id']
         self.region = config['aws_region']
         self.database = config['glue_database']
         self.workgroup = config['athena_workgroup']
         
+        # Streamlit Cloud: Try secrets (only if they actually exist and work)
+        secrets_worked = False
+        try:
+            if hasattr(st, 'secrets') and 'aws' in st.secrets:
+                # Test if we can actually access the secret values
+                test_key = st.secrets['aws']['AWS_ACCESS_KEY_ID']
+                if test_key:  # If we got here, secrets exist and work
+                    self.quicksight = boto3.client(
+                        'quicksight', 
+                        region_name=config['aws_region'],
+                        aws_access_key_id=st.secrets['aws']['AWS_ACCESS_KEY_ID'],
+                        aws_secret_access_key=st.secrets['aws']['AWS_SECRET_ACCESS_KEY']
+                    )
+                    secrets_worked = True
+        except:
+            secrets_worked = False
+        
+        # Local: Use profiles (only if secrets didn't work)
+        if not secrets_worked:
+            if config['aws_account_id'] == '476169753480':
+                # Account 2 - use brew-demo profile
+                session = boto3.Session(profile_name='brew-demo')
+                self.quicksight = session.client('quicksight', region_name=config['aws_region'])
+            else:
+                # Account 1 - use default profile
+                self.quicksight = boto3.client('quicksight', region_name=config['aws_region'])
+
     def generate_dataset_name(self, user_prompt, query_description="", custom_name=None):
         """Generate a clean dataset name with format: dept_project_date_time"""
         if custom_name:
