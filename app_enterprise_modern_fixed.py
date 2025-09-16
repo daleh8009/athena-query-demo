@@ -541,20 +541,38 @@ def get_aws_clients(config):
     except Exception:
         pass  # Fall through to other methods
     
-    # Try environment variables or default credentials (for Streamlit Cloud)
+    # Try local AWS profiles (localhost only)
     try:
-        return {
-            'athena': boto3.client('athena', region_name=config['aws_region']),
-            'glue': boto3.client('glue', region_name=config['aws_region'])
-        }
+        # Check if we're running locally (has AWS credentials file)
+        if os.path.exists(os.path.expanduser('~/.aws/credentials')):
+            # For Account 2, use the brew-demo profile (localhost only)
+            if config['aws_account_id'] == '476169753480':
+                session = boto3.Session(profile_name='brew-demo')
+                return {
+                    'athena': session.client('athena', region_name=config['aws_region']),
+                    'glue': session.client('glue', region_name=config['aws_region'])
+                }
+            else:
+                # For Account 1, use default credentials
+                return {
+                    'athena': boto3.client('athena', region_name=config['aws_region']),
+                    'glue': boto3.client('glue', region_name=config['aws_region'])
+                }
+        else:
+            # Streamlit Cloud - use default credentials (environment variables)
+            return {
+                'athena': boto3.client('athena', region_name=config['aws_region']),
+                'glue': boto3.client('glue', region_name=config['aws_region'])
+            }
     except Exception as e:
         st.error(f"AWS client creation error: {str(e)}")
-        st.info("💡 For Streamlit Cloud: Check secrets configuration in app settings.")
+        st.info("💡 For localhost: Ensure AWS profiles are configured. For Streamlit Cloud: Check secrets configuration.")
         # Return basic clients as fallback
         return {
             'athena': boto3.client('athena', region_name=config['aws_region']),
             'glue': boto3.client('glue', region_name=config['aws_region'])
         }
+
 def test_connection_status(config):
     """Test connection and show status"""
     try:
