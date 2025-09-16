@@ -437,20 +437,20 @@ def show_main_interface(config):
         st.markdown("### 💾 Saved Query Templates")
         
         for i, template in enumerate(reversed(st.session_state.saved_queries[-3:])):  # Show last 3
-            with st.expander(f"📝 {template['question']} - {template['timestamp']}"):
+            with st.expander(f"📝 {template.get('name', template.get('question', 'Unnamed Template'))} - {template['timestamp']}"):
                 st.code(template['sql'], language="sql")
                 
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     if st.button("🔄 Load Query", key=f"load_{i}", use_container_width=True):
                         st.session_state.current_sql = template['sql']
-                        st.session_state.current_question = template['question']
-                        st.success(f"✅ Loaded: {template['question']}")
+                        st.session_state.current_question = template.get('name', template.get('question', 'Loaded Template'))
+                        st.success(f"✅ Loaded: {template.get('name', template.get('question', 'Template'))}")
                         
                 with col2:
                     if st.button("▶️ Execute Now", key=f"exec_{i}", use_container_width=True):
                         st.session_state.current_sql = template['sql']
-                        st.session_state.current_question = template['question']
+                        st.session_state.current_question = template.get('name', template.get('question', 'Loaded Template'))
                         execute_enterprise_query(template['sql'], config)
                         
                 with col3:
@@ -572,7 +572,6 @@ def get_aws_clients(config):
             'athena': boto3.client('athena', region_name=config['aws_region']),
             'glue': boto3.client('glue', region_name=config['aws_region'])
         }
-
 def test_connection_status(config):
     """Test connection and show status"""
     try:
@@ -681,6 +680,11 @@ SELECT 'No tables available' as message;"""
     
     database_name = f'"{config["glue_database"]}"'
     
+    # Extract LIMIT from question (top N, first N, etc.)
+    import re
+    limit_match = re.search(r'\b(?:top|first)\s+(\d+)\b', question.lower())
+    limit_clause = f"LIMIT {limit_match.group(1)}" if limit_match else "LIMIT 100"
+    
     # Check if user manually selected a data source
     manual_source = st.session_state.get('manual_data_source', None)
     if manual_source and manual_source in available_tables:
@@ -688,7 +692,7 @@ SELECT 'No tables available' as message;"""
 -- Using manually selected: {manual_source}
 SELECT *
 FROM {database_name}.{manual_source}
-LIMIT 100;"""
+{limit_clause};"""
     
     # Continue with auto-selection logic
     views = [t for t in available_tables if 'view' in t.lower() or '_detailed' in t.lower()]
@@ -703,21 +707,134 @@ LIMIT 100;"""
 SELECT *
 FROM {database_name}.executive_dashboard_detailed
 ORDER BY Value DESC
-LIMIT 100;"""
+{limit_clause};"""
     
-    # Renewals queries - HIGH PRIORITY
-    if "renewal" in question_lower or "expiring" in question_lower:
+    # Top contracts by value
+    if "top" in question_lower and "contract" in question_lower and "value" in question_lower:
+        if "executive_dashboard_detailed" in views:
+            return f"""-- Generated from: "{question}"
+-- Auto-selected: Executive Dashboard View (Top by Value)
+SELECT *
+FROM {database_name}.executive_dashboard_detailed
+ORDER BY Value DESC
+{limit_clause};"""
+    
+    # Department with highest number of high-risk contracts
+    if "department" in question_lower and "highest number" in question_lower and "high" in question_lower and "risk" in question_lower:
+        if "compliance_contracts_detailed" in views:
+            return f"""-- Generated from: "{question}"
+-- Auto-selected: Compliance Team View for Department Risk Analysis
+SELECT 
+    Department,
+    COUNT(*) as high_risk_count
+FROM {database_name}.compliance_contracts_detailed
+WHERE Risk_Level = 'High'
+GROUP BY Department
+ORDER BY high_risk_count DESC
+{limit_clause};"""
+        elif "executive_dashboard_detailed" in views:
+            return f"""-- Generated from: "{question}"
+-- Using Executive Dashboard for Department Analysis
+-- Note: Risk_Level column not found, showing all contracts by department
+SELECT 
+    Department,
+    COUNT(*) as contract_count
+FROM {database_name}.executive_dashboard_detailed
+GROUP BY Department
+ORDER BY contract_count DESC
+{limit_clause};"""
+    
+    # Performance score filtering
+    if "performance" in question_lower and "score" in question_lower:
+        # Extract numeric threshold (below 75, above 80, etc.)
+        threshold_match = re.search(r'(?:below|under|less than|<)\s*(\d+)', question_lower)
+        above_match = re.search(r'(?:above|over|greater than|>)\s*(\d+)', question_lower)
+        
+        if threshold_match:
+            threshold = threshold_match.group(1)
+            if "compliance_contracts_detailed" in views:
+                return f"""-- Generated from: "{question}"
+-- Auto-selected: Compliance Team View for Performance Analysis
+SELECT Contract_Name, Performance_Score, Risk_Level
+FROM {database_name}.compliance_contracts_detailed
+WHERE Performance_Score < {threshold}
+ORDER BY Performance_Score ASC
+{limit_clause};"""
+            elif "executive_dashboard_detailed" in views:
+                return f"""-- Generated from: "{question}"
+-- Using Executive Dashboard for Performance Analysis
+SELECT Contract_Name, Performance_Score
+FROM {database_name}.executive_dashboard_detailed
+WHERE Performance_Score < {threshold}
+ORDER BY Performance_Score ASC
+{limit_clause};"""
+        elif above_match:
+            threshold = above_match.group(1)
+            if "compliance_contracts_detailed" in views:
+                return f"""-- Generated from: "{question}"
+-- Auto-selected: Compliance Team View for Performance Analysis
+SELECT Contract_Name, Performance_Score, Risk_Level
+FROM {database_name}.compliance_contracts_detailed
+WHERE Performance_Score > {threshold}
+ORDER BY Performance_Score DESC
+{limit_clause};"""
+    
+    # Performance by department analysis
+    if "performance" in question_lower and "department" in question_lower:
+        if "compliance_contracts_detailed" in views:
+            return f"""-- Generated from: "{question}"
+-- Auto-selected: Compliance Team View for Department Performance Analysis
+SELECT 
+    Department,
+    AVG(Performance_Score) as avg_performance_score,
+    MIN(Performance_Score) as min_performance_score,
+    MAX(Performance_Score) as max_performance_score,
+    COUNT(*) as contract_count
+FROM {database_name}.compliance_contracts_detailed
+GROUP BY Department
+ORDER BY avg_performance_score DESC
+{limit_clause};"""
+        elif "executive_dashboard_detailed" in views:
+            return f"""-- Generated from: "{question}"
+-- Using Executive Dashboard for Department Performance Analysis
+SELECT 
+    Department,
+    AVG(Performance_Score) as avg_performance_score,
+    COUNT(*) as contract_count
+FROM {database_name}.executive_dashboard_detailed
+GROUP BY Department
+ORDER BY avg_performance_score DESC
+{limit_clause};"""
+    
+    # Expiring contracts - check renewals view first, then executive view
+    if "expiring" in question_lower or "renewal" in question_lower:
         if "renewals_contracts_detailed" in views:
+            # Extract days if specified (30 days, 60 days, etc.)
+            days_match = re.search(r'(\d+)\s+days?', question_lower)
+            days = days_match.group(1) if days_match else "180"  # default 6 months
+            
             return f"""-- Generated from: "{question}"
 -- Auto-selected: Renewals Team View
 SELECT *
 FROM {database_name}.renewals_contracts_detailed
-WHERE End_Date <= DATE_ADD('month', 6, CURRENT_DATE)
-ORDER BY End_Date ASC
-LIMIT 100;"""
+WHERE DATE(End_Date) BETWEEN CURRENT_DATE AND DATE_ADD('day', {days}, CURRENT_DATE)
+ORDER BY {"Value DESC" if "value" in question_lower else "End_Date ASC"}
+{limit_clause};"""
+        elif "executive_dashboard_detailed" in views:
+            # Fallback to executive view for expiring contracts
+            days_match = re.search(r'(\d+)\s+days?', question_lower)
+            days = days_match.group(1) if days_match else "180"
+            
+            return f"""-- Generated from: "{question}"
+-- Using Executive Dashboard for expiring contracts
+SELECT Contract_Name, Status, End_Date, Value
+FROM {database_name}.executive_dashboard_detailed
+WHERE DATE(End_Date) BETWEEN CURRENT_DATE AND DATE_ADD('day', {days}, CURRENT_DATE)
+ORDER BY {"Value DESC" if "value" in question_lower else "End_Date ASC"}
+{limit_clause};"""
     
     # High risk queries - HIGH PRIORITY
-    if "high risk" in question_lower or ("risk" in question_lower and "high" in question_lower):
+    if "high risk" in question_lower or ("risk" in question_lower and "high" in question_lower) or "which contracts are high risk" in question_lower:
         if "compliance_contracts_detailed" in views:
             return f"""-- Generated from: "{question}"
 -- Using Compliance Team View for High Risk
@@ -725,7 +842,56 @@ SELECT *
 FROM {database_name}.compliance_contracts_detailed
 WHERE Risk_Level = 'High'
 ORDER BY Performance_Score ASC
-LIMIT 100;"""
+{limit_clause};"""
+        elif "contract_compliance" in tables:
+            return f"""-- Generated from: "{question}"
+-- Using Contract Compliance for High Risk Analysis
+SELECT *
+FROM {database_name}.contract_compliance
+WHERE risk_level = 'High'
+ORDER BY performance_score ASC
+{limit_clause};"""
+    
+    # Compliance status queries - HIGH PRIORITY
+    if "compliance status" in question_lower or "show compliance" in question_lower or "non-compliant contracts" in question_lower or "display all non-compliant" in question_lower:
+        if "compliance_contracts_detailed" in views:
+            if "non-compliant" in question_lower or "not compliant" in question_lower:
+                return f"""-- Generated from: "{question}"
+-- Using Compliance Team View for Non-Compliant Analysis
+SELECT *
+FROM {database_name}.compliance_contracts_detailed
+WHERE Compliance_Status = 'Non-Compliant'
+ORDER BY Risk_Level DESC, Performance_Score ASC
+{limit_clause};"""
+            else:
+                return f"""-- Generated from: "{question}"
+-- Using Compliance Team View for Status Distribution
+SELECT 
+    Compliance_Status,
+    COUNT(*) as contract_count,
+    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) as percentage
+FROM {database_name}.compliance_contracts_detailed
+GROUP BY Compliance_Status
+ORDER BY contract_count DESC;"""
+        elif "contract_compliance" in tables:
+            if "non-compliant" in question_lower or "not compliant" in question_lower:
+                return f"""-- Generated from: "{question}"
+-- Using Contract Compliance for Non-Compliant Analysis
+SELECT *
+FROM {database_name}.contract_compliance
+WHERE compliance_status = 'Non-Compliant'
+ORDER BY risk_level DESC, performance_score ASC
+{limit_clause};"""
+            else:
+                return f"""-- Generated from: "{question}"
+-- Using Contract Compliance for Status Distribution
+SELECT 
+    compliance_status,
+    COUNT(*) as contract_count,
+    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) as percentage
+FROM {database_name}.contract_compliance
+GROUP BY compliance_status
+ORDER BY contract_count DESC;"""
     
     # Compliance queries - MEDIUM PRIORITY
     if "compliance" in question_lower:
@@ -735,7 +901,7 @@ LIMIT 100;"""
 SELECT *
 FROM {database_name}.compliance_contracts_detailed
 ORDER BY Risk_Level, Performance_Score DESC
-LIMIT 100;"""
+{limit_clause};"""
     
     # Status/distribution queries - MEDIUM PRIORITY
     if "status" in question_lower or "distribution" in question_lower:
@@ -778,6 +944,26 @@ FROM {database_name}.executive_dashboard_detailed
 GROUP BY Department
 ORDER BY total_value DESC;"""
     
+    # Risk analysis with performance ratings - ADVANCED QUERY
+    if "risk analysis" in question_lower and "department" in question_lower and "performance" in question_lower:
+        if "contract_master" in available_tables and "contract_compliance" in available_tables:
+            return f"""-- Generated from: "{question}"
+-- Concepts: INNER JOIN, table aliases, calculated fields
+SELECT 
+    cm.Contract_Name,       -- Use table alias (cm) for clarity
+    cc.Risk_Level,
+    cc.Performance_Score,
+    CASE                    -- CASE: Create conditional logic
+        WHEN cc.Performance_Score >= 90 THEN 'Excellent'
+        WHEN cc.Performance_Score >= 80 THEN 'Good'
+        ELSE 'Needs Improvement'
+    END as Rating
+FROM {database_name}.contract_master cm     -- Alias: cm = contract_master
+INNER JOIN {database_name}.contract_compliance cc  -- INNER JOIN: Only matching records
+    ON cm.Contract_ID = cc.Contract_ID  -- Join condition: matching IDs
+WHERE cc.Risk_Level = 'High'
+ORDER BY cc.Performance_Score DESC;"""
+    
     # "All contract data" - SPECIFIC MATCH
     if "all" in question_lower and "contract" in question_lower:
         # Use the first table (not view) for raw data
@@ -787,7 +973,7 @@ ORDER BY total_value DESC;"""
 -- Using base table for all contract data
 SELECT *
 FROM {database_name}.{first_table}
-LIMIT 100;"""
+{limit_clause};"""
     
     # Generic fallback - ALWAYS RETURN SOMETHING
     # For contract-related questions, prefer contract tables
@@ -803,7 +989,7 @@ LIMIT 100;"""
 -- Using contract table for general query
 SELECT *
 FROM {database_name}.{contract_table}
-LIMIT 100;"""
+{limit_clause};"""
     
     # Final fallback - use first available item
     if tables:
@@ -812,14 +998,14 @@ LIMIT 100;"""
 -- Using base table: {first_table}
 SELECT *
 FROM {database_name}.{first_table}
-LIMIT 100;"""
+{limit_clause};"""
     elif views:
         first_view = views[0]
         return f"""-- Generated from: "{question}"
 -- Using view: {first_view}
 SELECT *
 FROM {database_name}.{first_view}
-LIMIT 100;"""
+{limit_clause};"""
     else:
         return f"""-- Generated from: "{question}"
 -- No suitable tables or views found
@@ -1032,8 +1218,8 @@ def render_saved_queries_sidebar():
         with st.sidebar.expander("💾 Saved Queries"):
             # Create dropdown options
             query_options = ["Select a saved query..."] + [
-                f"Query {i+1}: {query['question'][:40]}..." 
-                for i, query in enumerate(st.session_state.saved_queries)
+                f"{query.get('name', query.get('question', 'Unnamed Template'))} ({query['timestamp']})" 
+                for query in st.session_state.saved_queries
             ]
             
             selected_query = st.selectbox(
@@ -1051,7 +1237,7 @@ def render_saved_queries_sidebar():
                 
                 if st.button("Load This Query", key=f"load_query_{query_index}"):
                     st.session_state.current_sql = query['sql']
-                    st.session_state.current_question = query['question']
+                    st.session_state.current_question = query.get('name', query.get('question', 'Loaded Template'))
                     st.rerun()
 
 if __name__ == "__main__":
