@@ -43,8 +43,9 @@ class QuickSightExporter:
     def generate_dataset_name(self, user_prompt, query_description="", custom_name=None):
         """Generate a clean dataset name with format: dept_project_date_time"""
         if custom_name:
-            # For custom names, preserve underscores and clean format
+            # For custom names, preserve hyphens and underscores, clean other special chars
             clean_name = re.sub(r'[^a-zA-Z0-9_\-\s]', '', custom_name)
+            # Only convert spaces to underscores, preserve existing hyphens
             clean_name = re.sub(r'\s+', '_', clean_name).strip().lower()[:30]
         else:
             # Use the corrected table name format
@@ -380,6 +381,7 @@ def render_quicksight_export_ui(sql_query, user_prompt, query_description="", co
             st.success(f"✅ {result['message']}")
             st.session_state.qs_export_success = True
             st.session_state.qs_urls = result['urls']
+            st.rerun()  # Refresh UI to show enabled buttons
         else:
             st.error(f"❌ {result['message']}")
             st.session_state.qs_export_success = False
