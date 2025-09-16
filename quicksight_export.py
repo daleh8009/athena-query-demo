@@ -8,11 +8,20 @@ import json
 class QuickSightExporter:
     def __init__(self, config):
         # Use the same AWS configuration as the main app
-        # For Account 2, use the brew-demo profile
-        if config['aws_account_id'] == '476169753480':
-            session = boto3.Session(profile_name='brew-demo')
-            self.quicksight = session.client('quicksight', region_name=config['aws_region'])
-        else:
+        try:
+            # Try Streamlit Cloud secrets first
+            if hasattr(st, 'secrets') and 'aws' in st.secrets:
+                self.quicksight = boto3.client(
+                    'quicksight', 
+                    region_name=config['aws_region'],
+                    aws_access_key_id=st.secrets['aws']['AWS_ACCESS_KEY_ID'],
+                    aws_secret_access_key=st.secrets['aws']['AWS_SECRET_ACCESS_KEY']
+                )
+            else:
+                # Fallback to default credentials (environment variables, IAM roles, etc.)
+                self.quicksight = boto3.client('quicksight', region_name=config['aws_region'])
+        except Exception:
+            # Final fallback
             self.quicksight = boto3.client('quicksight', region_name=config['aws_region'])
         
         self.account_id = config['aws_account_id']
