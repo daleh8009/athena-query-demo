@@ -6,7 +6,7 @@ from datetime import datetime
 import json
 
 class QuickSightExporter:
-    def __init__(self, config):
+    def __init__(self, config): 
         # Use the same AWS configuration as the main app
         try:
             # Try Streamlit Cloud secrets first
@@ -17,6 +17,7 @@ class QuickSightExporter:
                     aws_access_key_id=st.secrets['aws']['AWS_ACCESS_KEY_ID'],
                     aws_secret_access_key=st.secrets['aws']['AWS_SECRET_ACCESS_KEY']
                 )
+                st.info(f"✅ Using Streamlit secrets for account {self.account_id}")
             else:
                 # Check if we're running locally (has AWS credentials file)
                 if os.path.exists(os.path.expanduser('~/.aws/credentials')):
@@ -24,15 +25,18 @@ class QuickSightExporter:
                     if config['aws_account_id'] == '476169753480':
                         session = boto3.Session(profile_name='brew-demo')
                         self.quicksight = session.client('quicksight', region_name=config['aws_region'])
+                        st.info(f"✅ Using brew-demo profile for account {self.account_id}")
                     else:
                         self.quicksight = boto3.client('quicksight', region_name=config['aws_region'])
+                        st.info(f"✅ Using default profile for account {self.account_id}")
                 else:
                     # Streamlit Cloud - use default credentials
                     self.quicksight = boto3.client('quicksight', region_name=config['aws_region'])
-        except Exception:
+        except Exception as e:
+            st.error(f"QuickSight client creation error: {str(e)}")
             # Final fallback
             self.quicksight = boto3.client('quicksight', region_name=config['aws_region'])
-        
+            
         self.account_id = config['aws_account_id']
         self.region = config['aws_region']
         self.database = config['glue_database']
