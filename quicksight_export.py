@@ -6,10 +6,10 @@ from datetime import datetime
 import json
 
 class QuickSightExporter:
-    def __init__(self, config): 
+    def __init__(self, config):
         # Use the same AWS configuration as the main app
         try:
-            # Try Streamlit Cloud secrets first
+            # Try Streamlit Cloud secrets first (for deployed version)
             if hasattr(st, 'secrets') and 'aws' in st.secrets:
                 self.quicksight = boto3.client(
                     'quicksight', 
@@ -19,24 +19,21 @@ class QuickSightExporter:
                 )
                 st.info(f"✅ Using Streamlit secrets for account {self.account_id}")
             else:
-                # Check if we're running locally (has AWS credentials file)
-                if os.path.exists(os.path.expanduser('~/.aws/credentials')):
-                    # For Account 2, use the brew-demo profile (localhost only)
-                    if config['aws_account_id'] == '476169753480':
-                        session = boto3.Session(profile_name='brew-demo')
-                        self.quicksight = session.client('quicksight', region_name=config['aws_region'])
-                        st.info(f"✅ Using brew-demo profile for account {self.account_id}")
-                    else:
-                        self.quicksight = boto3.client('quicksight', region_name=config['aws_region'])
-                        st.info(f"✅ Using default profile for account {self.account_id}")
+                # Local environment logic
+                if config['aws_account_id'] == '476169753480':
+                    # Account 2 - use brew-demo profile
+                    session = boto3.Session(profile_name='brew-demo')
+                    self.quicksight = session.client('quicksight', region_name=config['aws_region'])
+                    st.info(f"✅ Using brew-demo profile for account {self.account_id}")
                 else:
-                    # Streamlit Cloud - use default credentials
+                    # Account 1 - use default profile  
                     self.quicksight = boto3.client('quicksight', region_name=config['aws_region'])
+                    st.info(f"✅ Using default profile for account {self.account_id}")
         except Exception as e:
             st.error(f"QuickSight client creation error: {str(e)}")
             # Final fallback
             self.quicksight = boto3.client('quicksight', region_name=config['aws_region'])
-            
+        
         self.account_id = config['aws_account_id']
         self.region = config['aws_region']
         self.database = config['glue_database']
