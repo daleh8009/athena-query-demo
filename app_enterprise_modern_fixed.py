@@ -522,7 +522,7 @@ def get_aws_clients(config):
                 )
             }
         
-        # Try Streamlit Cloud secrets
+        # Try Streamlit Cloud secrets first
         if hasattr(st, 'secrets') and 'aws' in st.secrets:
             return {
                 'athena': boto3.client(
@@ -541,42 +541,20 @@ def get_aws_clients(config):
     except Exception:
         pass  # Fall through to other methods
     
-    # Try environment variables or AWS profiles (localhost)
+    # Try environment variables or default credentials (for Streamlit Cloud)
     try:
-        # For Account 2, use the brew-demo profile (localhost only)
-        if config['aws_account_id'] == '476169753480':
-            session = boto3.Session(profile_name='brew-demo')
-            return {
-                'athena': session.client('athena', region_name=config['aws_region']),
-                'glue': session.client('glue', region_name=config['aws_region'])
-            }
-        else:
-            # For Account 1, use default credentials
-            return {
-                'athena': boto3.client('athena', region_name=config['aws_region']),
-                'glue': boto3.client('glue', region_name=config['aws_region'])
-            }
+        return {
+            'athena': boto3.client('athena', region_name=config['aws_region']),
+            'glue': boto3.client('glue', region_name=config['aws_region'])
+        }
     except Exception as e:
         st.error(f"AWS client creation error: {str(e)}")
-        st.info("💡 For localhost: Ensure AWS profiles are configured. For Streamlit Cloud: Check secrets configuration.")
+        st.info("💡 For Streamlit Cloud: Check secrets configuration in app settings.")
         # Return basic clients as fallback
         return {
             'athena': boto3.client('athena', region_name=config['aws_region']),
             'glue': boto3.client('glue', region_name=config['aws_region'])
         }
-    """Get AWS clients with correct profile for the account"""
-    if config['aws_account_id'] == '476169753480':
-        session = boto3.Session(profile_name='brew-demo')
-        return {
-            'athena': session.client('athena', region_name=config['aws_region']),
-            'glue': session.client('glue', region_name=config['aws_region'])
-        }
-    else:
-        return {
-            'athena': boto3.client('athena', region_name=config['aws_region']),
-            'glue': boto3.client('glue', region_name=config['aws_region'])
-        }
-
 def test_connection_status(config):
     """Test connection and show status"""
     try:

@@ -5,6 +5,7 @@ import time
 from datetime import datetime
 import os
 from dotenv import load_dotenv
+from quicksight_export import render_quicksight_export_ui, render_quicksight_tips_sidebar, add_query_results_location_to_sidebar
 
 # Load environment variables
 load_dotenv()
@@ -325,55 +326,81 @@ def check_password():
 
 def main():
     # Password protection - must be first
-    if not check_password():
-        st.stop()
-    
-    # Header with Deloitte styling
-    st.markdown("""
-    <div class="deloitte-header">
-        <h1>🟢 Athena Query Generator</h1>
-        <p>Professional Analytics Platform - Deloitte Theme</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Sidebar configuration
-    with st.sidebar:
-        st.markdown("### 🔧 Configuration")
+    try:
+        if not check_password():
+            st.stop()
         
-        selected_account = st.selectbox(
-            "Select AWS Account:",
-            list(ACCOUNT_CONFIGS.keys()),
-            index=1  # Default to Account 2
-        )
+        # Header with Deloitte styling
+        st.markdown("""
+        <div class="deloitte-header">
+            <h1>🟢 Athena Query Generator</h1>
+            <p>Professional Analytics Platform - Deloitte Theme</p>
+        </div>
+        """, unsafe_allow_html=True)
         
-        current_config = ACCOUNT_CONFIGS[selected_account]
-        st.session_state.current_config = current_config
-        
-        # Connection test
-        if st.button("🔍 Test Connection", use_container_width=True):
-            test_connection_status(current_config)
-        
-        # Account info
-        with st.expander("📋 Account Details"):
-            st.write(f"**Account:** {current_config['aws_account_id']}")
-            st.write(f"**Database:** {current_config['glue_database']}")
-        
-        # Demo explanation
-        with st.expander("ℹ️ Demo Information"):
-            st.info("""
-            **Professional Theme Demo:**
+        # Sidebar configuration
+        with st.sidebar:
+            st.markdown("### 🔧 Configuration")
             
-            • **Deloitte-inspired** color scheme and styling
-            • **Enterprise-grade** visual design
-            • **Professional** user experience
+            # Combine default and user accounts
+            user_accounts = load_user_accounts()
+            all_accounts = {**ACCOUNT_CONFIGS, **user_accounts}
             
-            **Multi-Account Capability:**
-            • Account 2: Live data and full functionality
-            • Account 1: UI demonstration
-            """)
-    
-    # Main interface
-    show_main_interface(current_config)
+            selected_account = st.selectbox(
+                "Select AWS Account:",
+                list(all_accounts.keys()),
+                index=1 if len(all_accounts) > 1 else 0
+            )
+            
+            current_config = all_accounts[selected_account]
+            st.session_state.current_config = current_config
+            
+            # Connection test
+            if st.button("🔍 Test Connection", use_container_width=True):
+                test_connection_status(current_config)
+            
+            # Account info
+            with st.expander("📋 Account Details"):
+                st.write(f"**Account:** {current_config['aws_account_id']}")
+                st.write(f"**Database:** {current_config['glue_database']}")
+                add_query_results_location_to_sidebar(current_config)
+            
+            # QuickSight Tips as separate expandable section
+            render_quicksight_tips_sidebar()
+            
+            # Saved Queries section
+            render_saved_queries_sidebar()
+            
+            # Account Management
+            render_account_management()
+            
+            # Demo explanation
+            with st.expander("ℹ️ Demo Information"):
+                st.info("""
+                **Professional Theme Demo:**
+                
+                • **Deloitte-inspired** color scheme and styling
+                • **Enterprise-grade** visual design
+                • **Professional** user experience
+                
+                **Multi-Account Capability:**
+                • Account 2: Live data and full functionality
+                • Account 1: UI demonstration
+                
+                **Production Deployment:**
+                • Cross-account IAM roles
+                • Federated SSO access
+                • True multi-account authentication
+                
+                **Local Demo**: Shows full multi-account capability
+                """)
+        
+        # Main interface - Single page with better organization
+        show_main_interface(current_config)
+        
+    except Exception as e:
+        st.error(f"Application error: {str(e)}")
+        st.info("Please refresh the page and try again.")
 
 def show_main_interface(config):
     """Main query interface with Deloitte professional styling"""
@@ -602,32 +629,18 @@ def show_main_interface(config):
         # Professional data display
         st.dataframe(df, use_container_width=True, height=400)
         
-        # Professional export options
+        # Professional export options with QuickSight integration
         st.markdown("### 📤 Business Intelligence Export")
-        col1, col2 = st.columns(2)
         
-        with col1:
-            quicksight_datasets_url = f"https://{config['aws_region']}.quicksight.aws.amazon.com/sn/start/data-sets"
-            st.markdown(f"""
-            <a href="{quicksight_datasets_url}" target="_blank" class="deloitte-link">
-                📈 Create Dashboard
-            </a>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            quicksight_url = f"https://{config['aws_region']}.quicksight.aws.amazon.com/sn/start"
-            st.markdown(f"""
-            <a href="{quicksight_url}" target="_blank" class="deloitte-link">
-                🎯 QuickSight Console
-            </a>
-            """, unsafe_allow_html=True)
+        # Render QuickSight export UI
+        render_quicksight_export_ui(config, df, st.session_state.get('query_execution_id'))
         
         # Professional guidance
         if 'query_execution_id' in st.session_state:
             s3_location = f"s3://{config['s3_results_bucket']}/{st.session_state.query_execution_id}.csv"
             st.info(f"""
             **💡 Professional Integration Guide:**
-            1. Click "Create Dashboard" to build QuickSight visualizations
+            1. Use the QuickSight export above to create visualizations
             2. Data location: `{s3_location}`
             3. Database: `{config['glue_database']}`
             """)
@@ -945,8 +958,10 @@ def display_query_results(athena_client, query_execution_id):
         st.error(f"Error displaying results: {str(e)}")
 
 def save_query_template(question, sql):
+    """Save query as template with modern functionality"""
+    import json
     if 'saved_queries' not in st.session_state:
-        st.session_state.saved_queries = []
+        st.session_state.saved_queries = load_saved_queries()
     
     template = {
         'question': question,
@@ -955,7 +970,122 @@ def save_query_template(question, sql):
     }
     
     st.session_state.saved_queries.append(template)
-    st.success("✅ Query template saved successfully!")
+    
+    # Save to file
+    try:
+        with open('saved_queries.json', 'w') as f:
+            json.dump(st.session_state.saved_queries, f, indent=2)
+        st.success("✅ Query saved as template!")
+    except Exception as e:
+        st.error(f"Failed to save query: {str(e)}")
+
+def load_saved_queries():
+    """Load saved queries from file"""
+    import json
+    try:
+        with open('saved_queries.json', 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
+    except Exception:
+        return []
+
+def render_saved_queries_sidebar():
+    """Render saved queries in sidebar as compact expandable section"""
+    if 'saved_queries' not in st.session_state:
+        st.session_state.saved_queries = load_saved_queries()
+    
+    if st.session_state.saved_queries:
+        with st.sidebar.expander("💾 Saved Queries"):
+            # Create dropdown options
+            query_options = ["Select a saved query..."] + [
+                f"Query {i+1}: {query['question'][:40]}..." 
+                for i, query in enumerate(st.session_state.saved_queries)
+            ]
+            
+            selected_query = st.selectbox(
+                "Load Query:",
+                query_options,
+                key="saved_query_selector"
+            )
+            
+            if selected_query != "Select a saved query...":
+                query_index = query_options.index(selected_query) - 1
+                query = st.session_state.saved_queries[query_index]
+                
+                st.write(f"**Date:** {query['timestamp']}")
+                st.code(query['sql'][:200] + "..." if len(query['sql']) > 200 else query['sql'], language='sql')
+                
+                if st.button("Load This Query", key=f"load_query_{query_index}"):
+                    st.session_state.current_sql = query['sql']
+                    st.session_state.current_question = query['question']
+                    st.rerun()
+
+def load_user_accounts():
+    """Load user-added accounts from file"""
+    import json
+    try:
+        with open('user_accounts.json', 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+    except Exception:
+        return {}
+
+def save_user_accounts(accounts):
+    """Save user accounts to file"""
+    import json
+    try:
+        with open('user_accounts.json', 'w') as f:
+            json.dump(accounts, f, indent=2)
+        return True
+    except Exception:
+        return False
+
+def render_account_management():
+    """Render account management UI"""
+    st.sidebar.markdown("---")
+    
+    with st.sidebar.expander("➕ Add AWS Account"):
+        st.markdown("**Add Your AWS Account**")
+        
+        account_name = st.text_input("Account Name:", placeholder="My Company Account")
+        account_id = st.text_input("AWS Account ID:", placeholder="123456789012")
+        region = st.selectbox("Region:", ["us-east-1", "us-west-2", "eu-west-1"])
+        database = st.text_input("Glue Database:", placeholder="my-analytics-db")
+        workgroup = st.text_input("Athena Workgroup:", value="primary")
+        
+        st.markdown("**AWS Credentials (Optional)**")
+        st.info("💡 Leave blank if using AWS CLI, IAM roles, or SSO")
+        access_key = st.text_input("Access Key ID:", type="password")
+        secret_key = st.text_input("Secret Access Key:", type="password")
+        
+        if st.button("Add Account"):
+            if account_name and account_id and database:
+                user_accounts = load_user_accounts()
+                account_config = {
+                    'aws_region': region,
+                    'aws_account_id': account_id,
+                    'athena_workgroup': workgroup,
+                    's3_results_bucket': f'aws-athena-query-results-{region}-{account_id}',
+                    'glue_database': database,
+                    's3_raw_data': f's3://your-data-bucket/',
+                    'quicksight_account_id': account_id
+                }
+                
+                if access_key and secret_key:
+                    account_config['aws_access_key_id'] = access_key
+                    account_config['aws_secret_access_key'] = secret_key
+                
+                user_accounts[account_name] = account_config
+                
+                if save_user_accounts(user_accounts):
+                    st.success(f"✅ Account '{account_name}' added successfully!")
+                    st.rerun()
+                else:
+                    st.error("Failed to save account configuration")
+            else:
+                st.error("Please fill in all required fields")
 
 if __name__ == "__main__":
     main()
