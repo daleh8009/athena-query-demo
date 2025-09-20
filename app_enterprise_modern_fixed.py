@@ -32,6 +32,20 @@ ACCOUNT_CONFIGS = {
     }
 }
 
+# Override with Streamlit secrets if available (for cloud deployment)
+try:
+    if 'config' in st.secrets:
+        # Update Account 2 with secrets configuration
+        ACCOUNT_CONFIGS["Account 2 (476169753480)"].update({
+            'aws_region': st.secrets['config']['AWS_REGION'],
+            'aws_account_id': st.secrets['config']['QUICKSIGHT_ACCOUNT_ID'],
+            'athena_workgroup': st.secrets['config']['ATHENA_WORKGROUP'],
+            's3_results_bucket': st.secrets['config']['S3_RESULTS_BUCKET'],
+            'quicksight_account_id': st.secrets['config']['QUICKSIGHT_ACCOUNT_ID']
+        })
+except Exception:
+    pass  # Use default configs if secrets not available
+
 # Page configuration
 st.set_page_config(
     page_title="Athena Query Generator - Modern",
@@ -524,20 +538,26 @@ def get_aws_clients(config):
         
         # Try Streamlit Cloud secrets first
         if hasattr(st, 'secrets') and 'aws' in st.secrets:
+            # Check if session token is available
+            session_token = st.secrets['aws'].get('AWS_SESSION_TOKEN', None)
+            
             return {
                 'athena': boto3.client(
                     'athena', 
                     region_name=config['aws_region'],
                     aws_access_key_id=st.secrets['aws']['AWS_ACCESS_KEY_ID'],
-                    aws_secret_access_key=st.secrets['aws']['AWS_SECRET_ACCESS_KEY']
+                    aws_secret_access_key=st.secrets['aws']['AWS_SECRET_ACCESS_KEY'],
+                    aws_session_token=session_token
                 ),
                 'glue': boto3.client(
                     'glue', 
                     region_name=config['aws_region'],
                     aws_access_key_id=st.secrets['aws']['AWS_ACCESS_KEY_ID'],
-                    aws_secret_access_key=st.secrets['aws']['AWS_SECRET_ACCESS_KEY']
+                    aws_secret_access_key=st.secrets['aws']['AWS_SECRET_ACCESS_KEY'],
+                    aws_session_token=session_token
                 )
             }
+    
     except Exception:
         pass  # Fall through to other methods
     
